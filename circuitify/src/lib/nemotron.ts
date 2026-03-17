@@ -1,7 +1,7 @@
 import { PriorityMode } from "./types";
 
-const NVIDIA_URL = "https://integrate.api.nvidia.com/v1";
-const MODEL = "nvidia/nemotron-4-340b-instruct";
+const NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
+const MODEL = "nvidia/nvidia-nemotron-nano-9b-v2";
 
 function buildSystemPrompt(mode: PriorityMode): string {
   const modeInstruction =
@@ -57,11 +57,12 @@ export async function callNemotron(
     body: JSON.stringify({
       model: MODEL,
       messages: [
-        { role: "system", content: buildSystemPrompt(mode) },
+        { role: "system", content: "/no_think\n\n" + buildSystemPrompt(mode) },
         { role: "user", content: buildUserPrompt(appliancesJson, carbonJson) },
       ],
-      temperature: 0.2,
-      max_tokens: 1024,
+      temperature: 0.6,
+      top_p: 0.95,
+      max_tokens: 2048,
     }),
   });
 
@@ -73,8 +74,15 @@ export async function callNemotron(
   const data = await response.json();
   const content: string = data.choices?.[0]?.message?.content ?? "";
 
+  console.log("=== Nemotron raw response ===");
+  console.log(JSON.stringify(data.choices?.[0]?.message, null, 2));
+  console.log("=== End response ===");
+
+  // Strip <think>...</think> blocks if present
+  const cleaned = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
   // Extract JSON from response (handle possible markdown wrapping)
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     throw new Error("No JSON found in Nemotron response");
   }
